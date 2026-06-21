@@ -1,9 +1,14 @@
 export type User = {
   id: string;
   username: string;
+  password?: string;
   avatar: string;
   streaks: number;
   birthDate?: string;
+  email?: string;
+  gender?: string;
+  hasSeenWalkthrough?: boolean;
+  achievements?: string[];
 };
 
 export type Post = {

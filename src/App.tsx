@@ -8,16 +8,41 @@ import { ZocialyseProfile } from "./components/ZocialyseProfile";
 import { ToastContainer } from "./components/ToastContainer";
 import { CreatePostModal } from "./components/CreatePostModal";
 import { toast } from "./lib/toast";
-import { Layers, MessageSquare, PlaySquare, Bot, UserCircle, Plus } from "lucide-react";
+import { playNotificationSound } from "./lib/audio";
+import { Layers, MessageSquare, PlaySquare, Bot, UserCircle, Plus, Gamepad2 } from "lucide-react";
 import { useAppContext } from "./AppContext";
+import { ZocialyseGames } from "./components/ZocialyseGames";
 
-type Tab = "feed" | "social" | "watch" | "ai" | "profile";
+type Tab = "feed" | "social" | "watch" | "ai" | "profile" | "games";
 
 export default function App() {
-  const { user, login: loginContext, friends, logout } = useAppContext();
+  const { user, login: loginContext, friends, logout, updateUser } = useAppContext();
   const isAuthenticated = !!user;
   const [currentTab, setCurrentTab] = useState<Tab>("feed");
   const [isTagModalOpen, setIsTagModalOpen] = useState<{isOpen: boolean, taggedFriend?: string}>({isOpen: false});
+  
+  // Walkthrough state
+  const [walkthroughStep, setWalkthroughStep] = useState(-1);
+
+  useEffect(() => {
+    if (isAuthenticated && user && !user.hasSeenWalkthrough) {
+      setWalkthroughStep(0);
+    }
+  }, [isAuthenticated, user?.hasSeenWalkthrough]);
+
+  const handleNextWalkthroughStep = () => {
+    if (walkthroughStep < 5) {
+      setWalkthroughStep(prev => prev + 1);
+    } else {
+      setWalkthroughStep(-1);
+      updateUser({ hasSeenWalkthrough: true });
+    }
+  };
+
+  const handleSkipWalkthrough = () => {
+    setWalkthroughStep(-1);
+    updateUser({ hasSeenWalkthrough: true });
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -33,6 +58,7 @@ export default function App() {
       const timeout2 = setTimeout(() => {
         const birthdayFriend = friends.find(f => f.birthDate);
         if (birthdayFriend) {
+          playNotificationSound();
           toast({
             title: "🎉 Birthday Reminder",
             message: `It's ${birthdayFriend.username}'s birthday today! Wish them!`,
@@ -48,8 +74,23 @@ export default function App() {
     }
   }, [isAuthenticated, friends]);
 
+  const tabs: { id: Tab; icon: React.ReactNode; label: string }[] = [
+    { id: "feed", icon: <Layers className="w-6 h-6" />, label: "Posts" },
+    { id: "social", icon: <MessageSquare className="w-6 h-6" />, label: "Chat" },
+    { id: "watch", icon: <PlaySquare className="w-6 h-6" />, label: "Watch" },
+    { id: "ai", icon: <Bot className="w-6 h-6" />, label: "AI" },
+    { id: "games", icon: <Gamepad2 className="w-6 h-6" />, label: "Games" },
+    { id: "profile", icon: <UserCircle className="w-6 h-6" />, label: "Profile" },
+  ];
+
+  useEffect(() => {
+    if (walkthroughStep >= 0 && walkthroughStep < tabs.length) {
+      setCurrentTab(tabs[walkthroughStep].id);
+    }
+  }, [walkthroughStep]);
+
   if (!isAuthenticated) {
-    return <AuthScreen onLogin={(username, isRegister) => loginContext(username, isRegister)} />;
+    return <AuthScreen />;
   }
 
   const renderContent = () => {
@@ -58,17 +99,13 @@ export default function App() {
       case "social": return <ZocialyseSocial onOpenCreatePost={(friendName) => setIsTagModalOpen({isOpen: true, taggedFriend: friendName})} />;
       case "watch": return <ZocialyseWatch />;
       case "ai": return <ZocialyseAI />;
-      case "profile": return <ZocialyseProfile onLogout={logout} />;
+      case "games": return <ZocialyseGames />;
+      case "profile": return <ZocialyseProfile onLogout={logout} onNavigateToPost={(type) => {
+        if (type === 'video' || type === 'live') setCurrentTab('watch');
+        else setCurrentTab('feed');
+      }} />;
     }
   };
-
-  const tabs: { id: Tab; icon: React.ReactNode; label: string }[] = [
-    { id: "feed", icon: <Layers className="w-6 h-6" />, label: "Reels" },
-    { id: "social", icon: <MessageSquare className="w-6 h-6" />, label: "Chat" },
-    { id: "watch", icon: <PlaySquare className="w-6 h-6" />, label: "Watch" },
-    { id: "ai", icon: <Bot className="w-6 h-6" />, label: "AI" },
-    { id: "profile", icon: <UserCircle className="w-6 h-6" />, label: "Profile" },
-  ];
 
   return (
     <div className="flex bg-slate-950 h-[100dvh] w-full overflow-hidden font-sans">
@@ -136,6 +173,57 @@ export default function App() {
       </div>
 
       <CreatePostModal isOpen={isTagModalOpen.isOpen} prefillTagged={isTagModalOpen.taggedFriend} onClose={() => setIsTagModalOpen({isOpen: false})} />
+
+      {/* Walkthrough Overlay */}
+      {walkthroughStep >= 0 && walkthroughStep < tabs.length && (
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm z-[60] flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-sm w-full shadow-2xl relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-pink-500/20 blur-3xl rounded-full pointer-events-none"></div>
+            
+            <div className="w-16 h-16 bg-gradient-to-tr from-pink-500 to-orange-500 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-pink-500/20">
+              {tabs[walkthroughStep].icon}
+            </div>
+            
+            <h2 className="text-2xl font-bold text-white mb-2">
+              {tabs[walkthroughStep].label}
+            </h2>
+            
+            <p className="text-slate-400 mb-8 min-h-[60px]">
+              {walkthroughStep === 0 && "Discover engaging short-form videos from creators around the world. Swipe vertically to explore."}
+              {walkthroughStep === 1 && "Connect with friends, chat, and keep your daily streaks alive. Never miss a moment."}
+              {walkthroughStep === 2 && "Watch longer videos and livestreams. Interact with creators in real-time."}
+              {walkthroughStep === 3 && "Chat with our intelligent AI assistant to discover new content, get tips, or just have fun."}
+              {walkthroughStep === 4 && "Take a break and play some fun arcade games like Penalty Shootout and Hoops Master."}
+              {walkthroughStep === 5 && "Manage your profile, view your posts, track your analytics, and customize your settings."}
+            </p>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={handleSkipWalkthrough}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors"
+              >
+                Skip
+              </button>
+              <button 
+                onClick={handleNextWalkthroughStep}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-gradient-to-r from-pink-500 to-orange-500 hover:opacity-90 shadow-lg transition-all"
+              >
+                {walkthroughStep === tabs.length - 1 ? "Finish" : "Next"}
+              </button>
+            </div>
+            
+            {/* Dots */}
+            <div className="flex justify-center gap-2 mt-6">
+              {tabs.map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`w-2 h-2 rounded-full transition-colors ${i === walkthroughStep ? "bg-white" : "bg-slate-700"}`} 
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

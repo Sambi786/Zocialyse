@@ -18,7 +18,7 @@ export function ReactionButton({ postId, type, likes, className, iconClassName, 
   const { likePost } = useAppContext();
   const [showReactions, setShowReactions] = useState(false);
   const [selectedEmoji, setSelectedEmoji] = useState<string | null>(null);
-  const [flyingEmojis, setFlyingEmojis] = useState<{ id: number; emoji: string }[]>([]);
+  const [flyingEmojis, setFlyingEmojis] = useState<{ id: number; emoji: string; tx?: number; ty?: number }[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -47,10 +47,12 @@ export function ReactionButton({ postId, type, likes, className, iconClassName, 
   const handleReact = (emoji: string) => {
     likePost(postId, type);
     setSelectedEmoji(emoji);
-    setShowReactions(false);
 
     // Create flying effect
-    const newEmoji = { id: Date.now(), emoji };
+    const tx = (Math.random() - 0.5) * 120; // random between -60 and 60px
+    const ty = -150 - Math.random() * 150; // random between -150 and -300px
+    
+    const newEmoji = { id: Date.now() + Math.random(), emoji, tx, ty };
     setFlyingEmojis(prev => [...prev, newEmoji]);
     setTimeout(() => {
       setFlyingEmojis(prev => prev.filter(e => e.id !== newEmoji.id));
@@ -97,12 +99,14 @@ export function ReactionButton({ postId, type, likes, className, iconClassName, 
       {flyingEmojis.map((e) => (
         <div 
           key={e.id} 
-          className="absolute text-3xl pointer-events-none select-none z-[60]"
+          className="absolute text-5xl pointer-events-none select-none z-[60]"
           style={{
-            animation: 'flyUp .8s cubic-bezier(.16, 1, .3, 1) forwards',
+            animation: 'flyUp 1s cubic-bezier(.16, 1, .3, 1) forwards',
             left: '50%',
-            transform: 'translateX(-50%)'
-          }}
+            transform: 'translateX(-50%)',
+            '--tx': `${e.tx || 0}px`,
+            '--ty': `${e.ty || -150}px`
+          } as React.CSSProperties}
         >
           {e.emoji}
         </div>

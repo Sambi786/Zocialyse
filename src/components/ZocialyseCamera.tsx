@@ -101,7 +101,7 @@ export function ZocialyseCamera({ onClose, onSendToFriend }: { onClose: () => vo
     toast({
       title: "Story Created!",
       message: "Your snap with filter has been shared.",
-      icon: "camera"
+      icon: "bell"
     });
     onClose();
   };

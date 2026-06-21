@@ -2,17 +2,42 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Camera, Gamepad2, Layers, Zap, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "../lib/toast";
+import { useAppContext } from "../AppContext";
 
-export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister: boolean) => void }) {
+export function AuthScreen() {
+  const { login, resetOldAccount, completeTutorial } = useAppContext();
   const [isRegister, setIsRegister] = useState(false);
+  const [isResetRequired, setIsResetRequired] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [email, setEmail] = useState("");
+  const [gender, setGender] = useState("");
 
   const handleAuth = () => {
+    if (isResetRequired) {
+      if (!email.trim() || !password || !confirmPassword) {
+        toast({ title: "Error", message: "Please fill out all fields", icon: "bell" });
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast({ title: "Error", message: "Passwords do not match", icon: "bell" });
+        return;
+      }
+      const success = resetOldAccount(username, email, password);
+      if (success) {
+        toast({ title: "Success!", message: "Your old account has been secured! Welcome back.", icon: "gift" });
+      } else {
+        toast({ title: "Error", message: "Incorrect email. Please register as a new user.", icon: "bell" });
+        setIsResetRequired(false);
+        setIsRegister(true);
+      }
+      return;
+    }
+
     if (isRegister) {
-      if (!username.trim() || !password || !birthDate) {
+      if (!username.trim() || !password || !birthDate || !email.trim() || !gender) {
         toast({ title: "Error", message: "Please fill out all fields", icon: "bell" });
         return;
       }
@@ -26,7 +51,15 @@ export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister
         return;
       }
     }
-    onLogin(username, isRegister);
+    
+    const result = login(username, password, isRegister, email, gender);
+    if (result && result.status === 'old_account') {
+      setIsResetRequired(true);
+      setPassword("");
+      toast({ title: "Action Required", message: "Looks like this is an old account. Please confirm your email to set a password.", icon: "bell" });
+    } else if (result && result.status === 'new_user_tutorial') {
+      completeTutorial(result.pendingData);
+    }
   };
 
   return (
@@ -73,10 +106,11 @@ export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister
           transition={{ delay: 0.2, duration: 0.8 }}
           className="flex justify-center mb-8 relative"
         >
-          <div className="absolute inset-0 bg-gradient-to-tr from-pink-500 via-purple-500 to-blue-500 blur-2xl opacity-40 scale-150 rounded-full" />
-          <div className="relative bg-gradient-to-tr from-pink-500 via-purple-500 to-blue-500 p-5 rounded-3xl shadow-2xl flex items-center justify-center">
-            <Zap className="w-12 h-12 text-white fill-white/20" />
-            <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-yellow-300 animate-pulse" />
+          <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-indigo-500 blur-2xl opacity-40 scale-150 rounded-full" />
+          <div className="relative w-24 h-24 bg-slate-900 border border-slate-700/50 rounded-3xl shadow-2xl flex items-center justify-center">
+            <h1 className="text-6xl font-black bg-gradient-to-r from-cyan-400 to-indigo-500 bg-clip-text text-transparent transform">
+              Z
+            </h1>
           </div>
         </motion.div>
         
@@ -99,7 +133,7 @@ export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister
           <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
           
           <h2 className="text-2xl font-bold mb-8 text-center text-white/90">
-            {isRegister ? "Start Your Journey" : "Welcome Back"}
+            {isResetRequired ? "Secure Your Account" : isRegister ? "Start Your Journey" : "Welcome Back"}
           </h2>
           
           <form className="space-y-4 relative z-10" onSubmit={(e) => { e.preventDefault(); handleAuth(); }}>
@@ -128,17 +162,37 @@ export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden space-y-4"
+                  className="overflow-hidden space-y-4 pt-4"
                 >
                   <input 
                     type="password" 
                     placeholder="Confirm Password" 
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all font-medium placeholder-slate-500 text-white shadow-inner mt-4"
+                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all font-medium placeholder-slate-500 text-white shadow-inner"
                   />
                   <input 
-                    type="date" 
+                    type="email" 
+                    placeholder="Email Address" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all font-medium placeholder-slate-500 text-white shadow-inner"
+                  />
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all font-medium text-slate-400 shadow-inner appearance-none"
+                  >
+                    <option value="" disabled>Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="non_binary">Non-binary</option>
+                  </select>
+                  <input 
+                    type="text"
+                    onFocus={(e) => e.target.type = 'date'}
+                    onBlur={(e) => { if (!e.target.value) e.target.type = 'text'; }}
+                    placeholder="your birthday: dd.mm.year"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
                     className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05] transition-all font-medium text-slate-400 shadow-inner"
@@ -165,33 +219,54 @@ export function AuthScreen({ onLogin }: { onLogin: (username: string, isRegister
             </button>
           </div>
         </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8, duration: 1 }}
-          className="grid grid-cols-3 gap-4 text-center opacity-80"
-        >
-          <div className="flex flex-col items-center gap-2 hover:opacity-100 transition-opacity cursor-pointer transform hover:scale-110 transition-transform">
-            <div className="p-3 rounded-full bg-white/5 border border-white/10">
-              <Layers className="w-6 h-6 text-pink-400" />
-            </div>
-            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-300">Reels</span>
-          </div>
-          <div className="flex flex-col items-center gap-2 hover:opacity-100 transition-opacity cursor-pointer transform hover:scale-110 transition-transform">
-            <div className="p-3 rounded-full bg-white/5 border border-white/10">
-              <Camera className="w-6 h-6 text-purple-400" />
-            </div>
-            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-300">Filters</span>
-          </div>
-          <div className="flex flex-col items-center gap-2 hover:opacity-100 transition-opacity cursor-pointer transform hover:scale-110 transition-transform">
-            <div className="p-3 rounded-full bg-white/5 border border-white/10">
-              <Gamepad2 className="w-6 h-6 text-blue-400" />
-            </div>
-            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-300">Streaks</span>
-          </div>
-        </motion.div>
       </motion.div>
+
+      {/* Security Reset Dialog */}
+      {isResetRequired && (
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 w-full max-w-md rounded-3xl border border-slate-800 shadow-2xl p-8 relative animation-slide-up text-center">
+            <h2 className="text-2xl font-bold mb-2 text-white">Secure Your Account</h2>
+            <p className="text-sm text-slate-400 mb-6 font-medium">This is an old account. Please confirm your email address and set a new password to secure it.</p>
+            <div className="space-y-4 mb-8">
+              <input 
+                type="email" 
+                placeholder="Your Email Address" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-pink-500/50 transition-all font-medium placeholder-slate-500 text-white"
+              />
+              <input 
+                type="password" 
+                placeholder="New Password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-purple-500/50 transition-all font-medium placeholder-slate-500 text-white"
+              />
+              <input 
+                type="password" 
+                placeholder="Confirm New Password" 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500/50 transition-all font-medium placeholder-slate-500 text-white"
+              />
+            </div>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setIsResetRequired(false)}
+                className="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-bold text-sm uppercase tracking-widest transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleAuth}
+                className="flex-[2] py-3 px-4 bg-gradient-to-r from-pink-500 to-purple-500 hover:opacity-90 rounded-xl text-white font-bold text-sm uppercase tracking-widest transition-colors"
+              >
+                Verify & Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

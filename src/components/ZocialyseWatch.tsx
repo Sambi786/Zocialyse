@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Play, Radio, X, Send, Eye, MoreVertical, Share2, Heart, MessageCircle } from "lucide-react";
+import { Play, Radio, X, Send, Eye, MoreVertical, Share2, Heart, MessageCircle, Pause, Volume2, VolumeX, Maximize } from "lucide-react";
 import { PullToRefresh } from "./PullToRefresh";
 import { ShareModal } from "./ShareModal";
 import { useAppContext } from "../AppContext";
 import { ReactionButton } from "./ReactionButton";
+import { toast } from "../lib/toast";
 
 export function ZocialyseWatch() {
-  const { videos, user, likePost } = useAppContext();
+  const { videos, user, likePost, addFriend, friends } = useAppContext();
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [itemToShare, setItemToShare] = useState<{url: string, title: string} | null>(null);
   const [isLive, setIsLive] = useState(false);
@@ -16,6 +17,38 @@ export function ZocialyseWatch() {
   ]);
   const [chatInput, setChatInput] = useState("");
   const [viewerCount, setViewerCount] = useState(1);
+  const [activeVideo, setActiveVideo] = useState<any>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let interval: any;
+    if (activeVideo && isPlaying) {
+      interval = setInterval(() => {
+        setProgress(p => {
+          if (p >= 100) {
+            return 100;
+          }
+          return p + 0.1;
+        });
+      }, 50);
+    }
+    return () => clearInterval(interval);
+  }, [activeVideo, isPlaying]);
+
+  useEffect(() => {
+    if (progress >= 100 && isPlaying) {
+      setIsPlaying(false);
+    }
+  }, [progress, isPlaying]);
+
+  useEffect(() => {
+    if (activeVideo) {
+      setProgress(0);
+      setIsPlaying(true);
+    }
+  }, [activeVideo?.id]);
 
   useEffect(() => {
     if (!isLive) return;
@@ -45,6 +78,138 @@ export function ZocialyseWatch() {
     setItemToShare({ url: video.url, title: video.description });
     setShareModalOpen(true);
   };
+
+  if (activeVideo) {
+    return (
+      <div className="h-full bg-black flex flex-col relative overflow-hidden text-white group">
+        {/* Mock Video Container */}
+        <div className="flex-1 relative flex items-center justify-center bg-black">
+          <img 
+            src={activeVideo.url} 
+            alt={activeVideo.description} 
+            className="w-full h-full object-contain" 
+          />
+          
+          {/* Overlay gradient for controls */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+          {/* Center Play/Pause Overlay */}
+          <div 
+            className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            onClick={() => {
+              if (!isPlaying && progress >= 100) {
+                setProgress(0);
+                setIsPlaying(true);
+              } else {
+                setIsPlaying(!isPlaying);
+              }
+            }}
+          >
+            {!isPlaying && (
+              <div className="w-20 h-20 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center pointer-events-none">
+                <Play className="w-10 h-10 ml-2" />
+              </div>
+            )}
+          </div>
+
+          {/* Top Header */}
+          <div className="absolute top-0 left-0 right-0 p-4 pt-safe flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-auto">
+            <button 
+              onClick={() => setActiveVideo(null)}
+              className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 z-10">
+              <button onClick={(e) => handleShare(activeVideo, e)} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center hover:bg-white/20 transition-colors">
+                <Share2 className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Controls */}
+          <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            {/* Seeking progress bar */}
+            <div className="w-full h-1.5 bg-white/20 rounded-full mb-4 cursor-pointer relative overflow-hidden pointer-events-auto" onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pos = (e.clientX - rect.left) / rect.width;
+              setProgress(pos * 100);
+            }}>
+              <div 
+                className="absolute top-0 left-0 bottom-0 bg-pink-500 transition-all duration-75"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between pointer-events-auto">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => {
+                    if (!isPlaying && progress >= 100) {
+                      setProgress(0);
+                      setIsPlaying(true);
+                    } else {
+                      setIsPlaying(!isPlaying);
+                    }
+                  }}
+                  className="hover:text-pink-400 transition-colors"
+                >
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current" />}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsMuted(!isMuted)}
+                    className="hover:text-pink-400 transition-colors"
+                  >
+                    {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <span className="text-xs font-mono">
+                  {Math.floor(progress / 100 * 14)}:{Math.floor((progress / 100 * 14 * 60) % 60).toString().padStart(2, '0')} / 14:59
+                </span>
+                <button className="hover:text-pink-400 transition-colors">
+                  <Maximize className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Info Sidebar/Overlay (Desktop) or Bottom Sheet (Mobile) - simplified for demo */}
+        <div className="bg-slate-950 p-4 md:absolute md:top-0 md:right-0 md:w-80 md:h-full md:border-l md:border-slate-800 md:bg-slate-950/90 md:backdrop-blur-xl flex flex-col gap-4 z-20">
+          <div className="flex gap-3 items-center">
+            <img src={activeVideo.author.avatar} alt={activeVideo.author.username} className="w-10 h-10 rounded-full border border-slate-800" />
+            <div className="flex flex-col flex-1">
+              <h3 className="text-white font-bold text-sm leading-tight">{activeVideo.description}</h3>
+              <span className="text-slate-400 text-xs font-medium">{activeVideo.author.username}</span>
+            </div>
+          </div>
+          <div className="flex justify-around py-2 border-y border-slate-800">
+            <ReactionButton
+              postId={activeVideo.id}
+              type="video"
+              likes={activeVideo.likes}
+              className="flex flex-col items-center group cursor-pointer"
+              iconClassName="w-6 h-6"
+              textClassName="text-xs mt-1"
+            />
+            <div className="flex flex-col items-center group cursor-pointer text-slate-400 hover:text-white">
+              <MessageCircle className="w-6 h-6 mb-1" />
+              <span className="text-xs font-bold font-mono">124</span>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-[100px] hide-scrollbar text-sm text-slate-400 pb-4">
+            <p>Example comments...</p>
+            <p className="mt-2 text-slate-500">Amazing video! Keep it up. 🔥</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLive && user) {
     return (
@@ -156,8 +321,10 @@ export function ZocialyseWatch() {
 
       <PullToRefresh onRefresh={handleRefresh} containerClassName="flex-1" scrollClassName="p-4 md:p-6 lg:p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {videos.map((video) => (
-            <div key={video.id} className="group cursor-pointer flex flex-col">
+          {videos.map((video) => {
+            const isFollowing = friends.some(f => f.id === video.author.id) || video.author.id === user?.id;
+            return (
+            <div key={video.id} className="group cursor-pointer flex flex-col" onClick={() => setActiveVideo(video)}>
               <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-slate-800 mb-3 border border-transparent group-hover:border-slate-700 transition-colors relative">
                 <img src={video.url} alt={video.description} className="w-full h-full object-cover" />
                 
@@ -196,11 +363,24 @@ export function ZocialyseWatch() {
               <img src={video.author.avatar} alt={video.author.username} className="w-10 h-10 rounded-full border border-slate-800" />
               <div className="flex flex-col flex-1">
                 <h3 className="text-white font-bold text-sm line-clamp-2 leading-tight">{video.description}</h3>
-                <span className="text-slate-400 text-xs font-medium mt-1">{video.author.username}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-slate-400 text-xs font-medium">{video.author.username}</span>
+                  {!isFollowing && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); addFriend(video.author.id); }}
+                      className="text-pink-500 hover:text-pink-400 text-[10px] font-bold uppercase transition-colors"
+                    >
+                      Follow
+                    </button>
+                  )}
+                </div>
                 <span className="text-slate-500 text-xs">{video.type === "live" ? "Started 10m ago" : "2 days ago • 12K views"}</span>
               </div>
               <div className="pt-1 px-1 flex flex-col gap-2 items-center">
-                <MoreVertical className="w-5 h-5 text-slate-500 mb-2" />
+                <MoreVertical 
+                  className="w-5 h-5 text-slate-500 mb-2 cursor-pointer hover:text-white transition-colors" 
+                  onClick={(e) => { e.stopPropagation(); toast({ title: "More Options", message: "Video options coming soon.", icon: "bell" }) }}
+                />
                 <ReactionButton
                   postId={video.id}
                   type="video"
@@ -213,7 +393,7 @@ export function ZocialyseWatch() {
               </div>
             </div>
           </div>
-        ))}
+          )})}
         </div>
       </PullToRefresh>
 

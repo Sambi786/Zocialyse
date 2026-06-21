@@ -3,7 +3,19 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let ai: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!ai) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error("GEMINI_API_KEY environment variable is required");
+    }
+    ai = new GoogleGenAI({ apiKey: key });
+  }
+  return ai;
+}
+
 const PORT = 3000;
 
 async function startServer() {
@@ -26,8 +38,8 @@ async function startServer() {
         parts: [{ text: msg.text }]
       }));
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+      const response = await getAI().models.generateContent({
+        model: "gemini-2.5-flash",
         contents: [
           ...formattedHistory,
           { role: "user", parts: [{ text: message }] }
@@ -51,8 +63,8 @@ async function startServer() {
         "You are ZocialAI Analyst. You provide an advanced, fun, engaging, and personal data analysis report " +
         "for the user based on their mock Zocialyse profile data. Be upbeat and include some emojis.";
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+      const response = await getAI().models.generateContent({
+        model: "gemini-2.5-flash",
         contents: [
           { role: "user", parts: [{ text: `Analyze this profile data: ${JSON.stringify(profileData)}` }] }
         ],

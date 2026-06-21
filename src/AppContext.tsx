@@ -2,6 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Post, MOCK_USER, MOCK_FRIENDS, MOCK_REELS, MOCK_VIDEOS, MOCK_USER_POSTS } from "./data";
 import { toast } from "./lib/toast";
 
+export interface GroupChat {
+  id: string;
+  name: string;
+  avatar: string;
+  adminId: string;
+  members: string[];
+}
+
 interface AppState {
   user: User | null;
   users: User[];
@@ -9,14 +17,21 @@ interface AppState {
   videos: Post[];
   userPosts: Post[];
   friends: User[];
+  groups: GroupChat[];
   messages: Record<string, any[]>;
   accountsCount: number;
   hasSeenDemo: boolean;
-  login: (username: string, isRegister: boolean) => void;
+  login: (username: string, password: string, isRegister: boolean, email?: string, gender?: string) => { status: 'success' | 'new_user_tutorial' | 'old_account' | 'error', error?: string, pendingData?: any } | void;
+  completeTutorial: (pendingData: any) => void;
   logout: () => void;
   likePost: (postId: string, type: 'reel' | 'video' | 'post') => void;
   createPost: (post: Post) => void;
-  sendMessage: (friendId: string, text: string) => void;
+  sendMessage: (chatId: string, text: string, isGroup?: boolean) => void;
+  updateUser: (updatedData: Partial<User>) => void;
+  addFriend: (userId: string) => void;
+  deleteAccount: () => void;
+  resetOldAccount: (username: string, email: string, newPassword: string) => boolean;
+  createGroup: (name: string, memberIds: string[]) => void;
 }
 
 export const AppContext = createContext<AppState | null>(null);
@@ -25,6 +40,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([...MOCK_FRIENDS, MOCK_USER]); // all users
   const [friends, setFriends] = useState<User[]>(MOCK_FRIENDS);
+  const [groups, setGroups] = useState<GroupChat[]>([]);
   const [reels, setReels] = useState<Post[]>(MOCK_REELS);
   const [videos, setVideos] = useState<Post[]>(MOCK_VIDEOS);
   const [userPosts, setUserPosts] = useState<Post[]>(MOCK_USER_POSTS);
@@ -41,6 +57,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(parsed.user || null);
         setUsers(parsed.users || [...MOCK_FRIENDS, MOCK_USER]);
         setFriends(parsed.friends || MOCK_FRIENDS);
+        setGroups(parsed.groups || []);
         setReels(parsed.reels || MOCK_REELS);
         setVideos(parsed.videos || MOCK_VIDEOS);
         setUserPosts(parsed.userPosts || MOCK_USER_POSTS);
@@ -56,6 +73,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       user: newState.user !== undefined ? newState.user : user,
       users: newState.users || users,
       friends: newState.friends || friends,
+      groups: newState.groups || groups,
       reels: newState.reels || reels,
       videos: newState.videos || videos,
       userPosts: newState.userPosts || userPosts,
@@ -65,8 +83,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }));
   };
 
-  const login = (username: string, isRegister: boolean) => {
-    let newUser: User = { id: `u_${Date.now()}`, username, avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`, streaks: 0 };
+  const login = (username: string, password: string, isRegister: boolean, email?: string, gender?: string) => {
+    let newUser: User = { id: `u_${Date.now()}`, username, password, avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`, streaks: 0, email, gender };
     
     let nextAccountsCount = accountsCount;
     let nextHasSeenDemo = hasSeenDemo;
@@ -77,24 +95,36 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     let nextUsers = [...users];
 
     if (isRegister) {
+      const existing = nextUsers.find(u => u.username === username);
+      if (existing) {
+        toast({ title: "Username taken", message: "That username is already in use.", icon: "bell" });
+        return { status: 'error' as const, error: 'username_taken' };
+      }
       nextAccountsCount += 1;
       
-      if (!nextHasSeenDemo) {
-        toast({
-          title: "Demo Experience",
-          message: "We've pre-loaded some examples. They are only shown ONE time to give you a tour! 👀",
-          icon: "bell"
-        });
-        nextHasSeenDemo = true;
-      } else {
-        // Clear mock data if demo was already seen
-        nextReels = nextReels.filter(r => !r.id.startsWith('r'));
-        nextVideos = nextVideos.filter(v => !v.id.startsWith('v'));
-        nextUserPosts = nextUserPosts.filter(p => !p.id.startsWith('p'));
-        nextFriends = nextFriends.filter(f => !f.id.startsWith('f'));
-      }
+      toast({
+        title: "🚀 DEMO MODE ACTIVE",
+        message: "IMPORTANT: You are seeing the Demo version with pre-loaded examples. This happens ONLY ONCE to give you a tour of the app. Next time you login, it will be completely empty!",
+        icon: "gift"
+      });
+      nextHasSeenDemo = true;
 
-      // 10th user celebration
+      // Restore demo data for new accounts
+      const missingDemoReels = MOCK_REELS.filter(mr => !nextReels.find(r => r.id === mr.id));
+      nextReels = [...nextReels, ...missingDemoReels];
+
+      const missingDemoVideos = MOCK_VIDEOS.filter(mv => !nextVideos.find(v => v.id === mv.id));
+      nextVideos = [...nextVideos, ...missingDemoVideos];
+
+      const missingDemoPosts = MOCK_USER_POSTS.filter(mp => !nextUserPosts.find(p => p.id === mp.id)).map(p => ({ ...p, author: newUser, id: p.id }));
+      nextUserPosts = [...missingDemoPosts, ...nextUserPosts];
+
+      const missingDemoFriends = MOCK_FRIENDS.filter(mf => !nextFriends.find(f => f.id === mf.id));
+      nextFriends = [...nextFriends, ...missingDemoFriends];
+      
+      const missingDemoUsers = MOCK_FRIENDS.filter(mf => !nextUsers.find(u => u.id === mf.id));
+      nextUsers = [...nextUsers, ...missingDemoUsers];
+      
       if (nextAccountsCount % 10 === 0) {
         toast({
           title: "🎉 10th User! 🎉",
@@ -124,10 +154,31 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       nextUserPosts = [welcomePost, ...nextUserPosts];
       nextUsers = [...nextUsers, newUser];
       
+      return {
+        status: 'new_user_tutorial' as const,
+        pendingData: {
+          newUser, nextUsers, nextFriends, nextReels, nextVideos, nextUserPosts, nextAccountsCount, nextHasSeenDemo
+        }
+      };
     } else {
       // login
+      if (nextHasSeenDemo) {
+        nextReels = nextReels.filter(r => !r.id.startsWith('r'));
+        nextVideos = nextVideos.filter(v => !v.id.startsWith('v'));
+        nextUserPosts = nextUserPosts.filter(p => !p.id.startsWith('p'));
+        nextFriends = nextFriends.filter(f => !f.id.startsWith('f'));
+      }
+
       const existing = nextUsers.find(u => u.username === username);
       if (existing) {
+        if (!existing.password) {
+          // Old account, needs password and email reset
+          return { status: 'old_account' as const };
+        }
+        if (existing.password && existing.password !== password) {
+          toast({ title: "Incorrect Password", message: "The password you entered is incorrect.", icon: "bell" });
+          return { status: 'error' as const, error: 'incorrect_password' };
+        }
         newUser = existing;
         toast({
           title: "Welcome Back",
@@ -137,9 +188,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         toast({
           title: "Account not found",
-          message: `We couldn't find ${username}. Logging you in as a new guest.`,
+          message: `We couldn't find ${username}. Please register.`,
           icon: "bell"
         });
+        return { status: 'error' as const, error: 'not_found' };
       }
     }
 
@@ -162,6 +214,53 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       accountsCount: nextAccountsCount,
       hasSeenDemo: nextHasSeenDemo
     });
+    return { status: 'success' as const };
+  };
+
+  const completeTutorial = (pendingData: any) => {
+    setUser(pendingData.newUser);
+    setUsers(pendingData.nextUsers);
+    setFriends(pendingData.nextFriends);
+    setReels(pendingData.nextReels);
+    setVideos(pendingData.nextVideos);
+    setUserPosts(pendingData.nextUserPosts);
+    setAccountsCount(pendingData.nextAccountsCount);
+    setHasSeenDemo(pendingData.nextHasSeenDemo);
+
+    saveState({
+      user: pendingData.newUser,
+      users: pendingData.nextUsers,
+      friends: pendingData.nextFriends,
+      reels: pendingData.nextReels,
+      videos: pendingData.nextVideos,
+      userPosts: pendingData.nextUserPosts,
+      accountsCount: pendingData.nextAccountsCount,
+      hasSeenDemo: pendingData.nextHasSeenDemo
+    });
+  };
+
+  const resetOldAccount = (username: string, email: string, newPassword: string) => {
+    const existingIndex = users.findIndex(u => u.username === username);
+    if (existingIndex === -1) return false;
+    const existing = users[existingIndex];
+    if (existing.email && existing.email.toLowerCase() !== email.toLowerCase()) {
+      return false;
+    }
+    
+    // Reset password
+    const updatedUser = { ...existing, password: newPassword, email: email };
+    
+    // Only update the user, don't log them in yet, or do we? 
+    // Usually a password reset logs you in or confirms.
+    const nextUsers = [...users];
+    nextUsers[existingIndex] = updatedUser;
+    setUsers(nextUsers);
+    setUser(updatedUser);
+    saveState({
+      users: nextUsers,
+      user: updatedUser
+    });
+    return true;
   };
 
   const logout = () => {
@@ -202,30 +301,124 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     saveState({ userPosts: updatedUserPosts });
   };
 
-  const sendMessage = (friendId: string, text: string) => {
+  const sendMessage = (chatId: string, text: string, isGroup?: boolean) => {
     const updatedMsgs = { ...messages };
-    if (!updatedMsgs[friendId]) updatedMsgs[friendId] = [];
-    updatedMsgs[friendId].push({ sender: 'me', text, id: Date.now() });
+    if (!updatedMsgs[chatId]) updatedMsgs[chatId] = [];
+    updatedMsgs[chatId].push({ sender: 'me', text, id: Date.now() });
     
-    // Auto-reply
-    setTimeout(() => {
-      setMessages(prev => {
-        const next = { ...prev };
-        if (!next[friendId]) next[friendId] = [];
-        next[friendId].push({ sender: 'them', text: `Got it! 😉`, id: Date.now() + 1 });
-        saveState({ messages: next });
-        return next;
-      });
-    }, 1500);
+    // Auto-reply for individuals
+    if (!isGroup) {
+      setTimeout(() => {
+        setMessages(prev => {
+          const next = { ...prev };
+          if (!next[chatId]) next[chatId] = [];
+          next[chatId].push({ sender: 'them', text: `Got it! 😉`, id: Date.now() + 1 });
+          saveState({ messages: next });
+          return next;
+        });
+      }, 1500);
+    }
 
     setMessages(updatedMsgs);
     saveState({ messages: updatedMsgs });
   };
 
+  const createGroup = (name: string, memberIds: string[]) => {
+    if (!user) return;
+    const newGroup: GroupChat = {
+      id: `g_${Date.now()}`,
+      name,
+      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}`,
+      adminId: user.id,
+      members: [user.id, ...memberIds]
+    };
+    const nextGroups = [...groups, newGroup];
+    setGroups(nextGroups);
+    saveState({ groups: nextGroups });
+    toast({ title: "Group Created", message: `You created a new group: ${name}`, icon: "bell" });
+  };
+
+  const updateUser = (updatedData: Partial<User>) => {
+    if (!user) return;
+    const newUser = { ...user, ...updatedData };
+    setUser(newUser);
+    
+    // Also update in users list so it persists correctly if needed
+    const nextUsers = users.map(u => u.id === user.id ? newUser : u);
+    setUsers(nextUsers);
+    
+    // Update posts authored by user
+    const updateAuthor = (post: Post) => post.author.id === user.id ? { ...post, author: newUser } : post;
+    const nextReels = reels.map(updateAuthor);
+    const nextVideos = videos.map(updateAuthor);
+    const nextUserPosts = userPosts.map(updateAuthor);
+    
+    setReels(nextReels);
+    setVideos(nextVideos);
+    setUserPosts(nextUserPosts);
+
+    saveState({ 
+      user: newUser, 
+      users: nextUsers,
+      reels: nextReels,
+      videos: nextVideos,
+      userPosts: nextUserPosts
+    });
+    
+    toast({
+      title: "Profile Updated",
+      message: "Your profile has been saved successfully.",
+      icon: "bell"
+    });
+  };
+
+  const addFriend = (userId: string) => {
+    const friendToAdd = users.find(u => u.id === userId);
+    if (!friendToAdd) return;
+    if (friends.some(f => f.id === userId)) {
+      toast({ title: "Already following", message: `You are already following ${friendToAdd.username}`, icon: "bell" });
+      return;
+    }
+    const nextFriends = [...friends, friendToAdd];
+    setFriends(nextFriends);
+    saveState({ friends: nextFriends });
+    toast({ title: "Started following", message: `You are now following ${friendToAdd.username}`, icon: "bell" });
+  };
+
+  const deleteAccount = () => {
+    if (!user) return;
+    
+    // Remove user's data
+    const nextUsers = users.filter(u => u.id !== user.id);
+    const nextReels = reels.filter(r => r.author.id !== user.id);
+    const nextVideos = videos.filter(v => v.author.id !== user.id);
+    const nextFriends = friends.filter(f => f.id !== user.id);
+    
+    setUser(null);
+    setUsers(nextUsers);
+    setReels(nextReels);
+    setVideos(nextVideos);
+    setUserPosts([]);
+    setFriends(nextFriends);
+    setMessages({});
+    
+    saveState({
+      user: null,
+      users: nextUsers,
+      reels: nextReels,
+      videos: nextVideos,
+      userPosts: [],
+      friends: nextFriends,
+      messages: {}
+    });
+    
+    toast({ title: "Account Deleted", message: "Your account has been permanently deleted.", icon: "bell" });
+  };
+
   return (
     <AppContext.Provider value={{
-      user, users, reels, videos, userPosts, friends, messages, accountsCount, hasSeenDemo,
-      login, logout, likePost, createPost, sendMessage
+      user, users, reels, videos, userPosts, friends, groups, messages, accountsCount, hasSeenDemo,
+      login, logout, likePost, createPost, sendMessage, updateUser, addFriend, deleteAccount, resetOldAccount, completeTutorial, createGroup
     }}>
       {children}
     </AppContext.Provider>

@@ -5,9 +5,10 @@ import { PullToRefresh } from "./PullToRefresh";
 import { ShareModal } from "./ShareModal";
 import { useAppContext } from "../AppContext";
 import { ReactionButton } from "./ReactionButton";
+import { toast } from "../lib/toast";
 
 export function ZocialyseFeed() {
-  const { reels, likePost } = useAppContext();
+  const { reels, likePost, addFriend, friends, user } = useAppContext();
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [itemToShare, setItemToShare] = useState<{url: string, title: string} | null>(null);
 
@@ -24,7 +25,10 @@ export function ZocialyseFeed() {
   return (
     <>
       <PullToRefresh onRefresh={handleRefresh} scrollClassName="snap-y snap-mandatory bg-slate-950">
-        {reels.map((reel) => (
+        {reels.map((reel) => {
+          const isFollowing = friends.some(f => f.id === reel.author.id) || reel.author.id === user?.id;
+          
+          return (
           <div key={reel.id} className="relative h-[100dvh] md:h-full w-full md:max-w-[480px] md:mx-auto snap-start snap-always bg-black md:border-x border-slate-800/80">
             {/* Mock Video Container */}
             <div 
@@ -40,9 +44,14 @@ export function ZocialyseFeed() {
                   <div className="flex items-center gap-2 mb-3">
                     <img src={reel.author.avatar} alt={reel.author.username} className="w-10 h-10 rounded-full border-2 border-white bg-slate-800" />
                     <span className="text-white font-bold text-base shadow-sm">{reel.author.username}</span>
-                    <button className="px-4 py-1.5 bg-white hover:bg-slate-200 text-slate-950 text-xs font-bold rounded-xl transition-all ml-2 shadow-lg">
-                      Follow
-                    </button>
+                    {!isFollowing && (
+                      <button 
+                        onClick={() => addFriend(reel.author.id)}
+                        className="px-4 py-1.5 bg-white hover:bg-slate-200 text-slate-950 text-xs font-bold rounded-xl transition-all ml-2 shadow-lg"
+                      >
+                        Follow
+                      </button>
+                    )}
                   </div>
                   <p className="text-white font-medium text-sm drop-shadow-md line-clamp-3">
                     {reel.description}
@@ -55,7 +64,10 @@ export function ZocialyseFeed() {
                     type="reel"
                     likes={reel.likes}
                   />
-                  <div className="flex flex-col items-center gap-1 group cursor-pointer">
+                  <div 
+                    className="flex flex-col items-center gap-1 group cursor-pointer"
+                    onClick={() => toast({ title: "Comments", message: "Comments section opening soon!", icon: "bell" })}
+                  >
                     <div className="p-3 bg-black/40 rounded-2xl backdrop-blur-sm group-hover:bg-white/20 transition-all border border-transparent group-hover:border-white/30">
                       <MessageCircle className="w-6 h-6 text-white" />
                     </div>
@@ -70,14 +82,17 @@ export function ZocialyseFeed() {
                     </div>
                     <span className="text-white text-xs font-bold drop-shadow-md">Share</span>
                   </div>
-                  <div className="flex flex-col items-center gap-1 group cursor-pointer pt-2">
+                  <div 
+                    className="flex flex-col items-center gap-1 group cursor-pointer pt-2"
+                    onClick={() => toast({ title: "More Options", message: "Additional options are coming soon.", icon: "bell" })}
+                  >
                     <MoreVertical className="w-6 h-6 text-white" />
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        ))}
+          )})}
       </PullToRefresh>
       <ShareModal 
         isOpen={shareModalOpen} 
